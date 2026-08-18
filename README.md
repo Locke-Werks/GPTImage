@@ -1,4 +1,17 @@
+<div align="center">
+
+<img src="assets/gptimage.ico" width="96" alt="GPTImage">
+
 # GPTImage
+
+**Bolts OpenAI's gpt-image-2 into your chat window so you stop alt-tabbing like some kind of animal.**
+
+[![license](https://img.shields.io/badge/license-GPLv3-d6262a?style=flat-square)](LICENSE)
+![platform](https://img.shields.io/badge/platform-C%2B%2B20-d6262a?style=flat-square)
+
+</div>
+
+---
 
 An MCP server that bolts OpenAI's `gpt-image-2` onto Claude so you can stop
 alt-tabbing between two chat windows like some kind of animal.
