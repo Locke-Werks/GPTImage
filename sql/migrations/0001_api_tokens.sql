@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS gptimage.api_tokens (
     token_hash   TEXT PRIMARY KEY,          -- sha256 hex of the full bearer token
     principal    TEXT NOT NULL,
     grants       JSONB NOT NULL DEFAULT '{}'::jsonb,
-        -- {"home":"nyx","read":["nyx","commons"],"write":["nyx","commons"],
+        -- {"home":"alice","read":["alice","commons"],"write":["alice","commons"],
         --  "max_sensitivity":"medium"}.  read/write may be ["*"] for all realms.
     enabled      BOOLEAN NOT NULL DEFAULT TRUE,
     note         TEXT,                       -- human label, e.g. "claude-code laptop"

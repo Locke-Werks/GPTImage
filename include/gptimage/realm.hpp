@@ -63,7 +63,7 @@ bool resolve_write_realms(const RealmGrant& grant,
                           std::string& err);
 
 // Format a string vector as a Postgres text[] array literal — e.g.
-// {"archon","commons"} — safe to bind as one $N parameter of type text[].
+// {"bob","commons"} — safe to bind as one $N parameter of type text[].
 // Elements are double-quoted with internal " and \ escaped. Empty ⇒ "{}".
 std::string format_text_array(const std::vector<std::string>& items);
 

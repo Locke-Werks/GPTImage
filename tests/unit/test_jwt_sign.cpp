@@ -44,7 +44,7 @@ json base_claims() {
     return json{
         {"iss", "https://gptimage.test"},
         {"aud", "https://gptimage.test/mcp"},
-        {"sub", "archon"},
+        {"sub", "bob"},
         {"iat", now},
         {"exp", now + 3600},
     };
@@ -111,7 +111,7 @@ TEST_CASE("mint -> verify round trip via JwtVerifier with a local fetcher") {
     std::string err;
     auto v = verifier.verify(jwt, err);
     REQUIRE_MESSAGE(v.has_value(), err);
-    CHECK(v->subject == "archon");
+    CHECK(v->subject == "bob");
     CHECK(v->claims.at("aud") == "https://gptimage.test/mcp");
 }
 

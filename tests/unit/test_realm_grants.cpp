@@ -14,15 +14,15 @@ using nlohmann::json;
 
 namespace {
 
-// nyx-style grant: home realm + commons, no wildcard, medium ceiling.
+// alice-style grant: home realm + commons, no wildcard, medium ceiling.
 RealmGrant nyx_grant() {
     RealmGrant g;
-    g.principal       = "nyx";
-    g.home_realm      = "nyx";
+    g.principal       = "alice";
+    g.home_realm      = "alice";
     g.read_all        = false;
     g.write_all       = false;
-    g.read_realms     = {"nyx", "commons"};
-    g.write_realms    = {"nyx", "commons"};
+    g.read_realms     = {"alice", "commons"};
+    g.write_realms    = {"alice", "commons"};
     g.max_sensitivity = "medium";
     return g;
 }
@@ -51,7 +51,7 @@ TEST_CASE("default read scope is home + commons, deduped") {
     REQUIRE(gptimage::resolve_read_realms(g, json::object(), out, err));
     CHECK(err.empty());
     CHECK(out.size() == 2);
-    CHECK(contains(out, "nyx"));
+    CHECK(contains(out, "alice"));
     CHECK(contains(out, "commons"));
 }
 
@@ -77,7 +77,7 @@ TEST_CASE("explicit realms within grant are honored") {
 
 TEST_CASE("explicit realm outside grant is rejected") {
     auto g = nyx_grant();
-    json args = {{"realms", json::array({"archon"})}};
+    json args = {{"realms", json::array({"bob"})}};
     std::vector<std::string> out;
     std::string err;
     CHECK_FALSE(gptimage::resolve_read_realms(g, args, out, err));
@@ -121,7 +121,7 @@ TEST_CASE("wildcard requires read_all") {
 
 TEST_CASE("wildcard cannot be mixed with explicit realms") {
     auto g = gptimage::local_grant();
-    json args = {{"realms", json::array({"*", "archon"})}};
+    json args = {{"realms", json::array({"*", "bob"})}};
     std::vector<std::string> out;
     std::string err;
     CHECK_FALSE(gptimage::resolve_read_realms(g, args, out, err));
@@ -141,7 +141,7 @@ TEST_CASE("write realm resolution") {
         std::vector<std::string> out;
         std::string err;
         REQUIRE(gptimage::resolve_write_realms(g, out, err));
-        CHECK(contains(out, "nyx"));
+        CHECK(contains(out, "alice"));
         CHECK(contains(out, "commons"));
     }
     SUBCASE("no write authority is rejected") {
@@ -167,8 +167,8 @@ TEST_CASE("sensitivity cap maps to rank") {
 
 TEST_CASE("format_text_array produces a valid PG literal") {
     CHECK(gptimage::format_text_array({}) == "{}");
-    CHECK(gptimage::format_text_array({"nyx"}) == "{\"nyx\"}");
-    CHECK(gptimage::format_text_array({"nyx", "commons"}) == "{\"nyx\",\"commons\"}");
+    CHECK(gptimage::format_text_array({"alice"}) == "{\"alice\"}");
+    CHECK(gptimage::format_text_array({"alice", "commons"}) == "{\"alice\",\"commons\"}");
     // Defensive escaping of embedded quote / backslash.
     CHECK(gptimage::format_text_array({"a\"b"}) == "{\"a\\\"b\"}");
 }

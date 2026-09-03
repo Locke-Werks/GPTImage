@@ -64,31 +64,31 @@ TEST_CASE("generate_token shape and uniqueness") {
 }
 
 TEST_CASE("grant_from_json: wildcard read/write") {
-    json g = {{"home", "archon"}, {"read", {"*"}}, {"write", {"*"}}};
+    json g = {{"home", "bob"}, {"read", {"*"}}, {"write", {"*"}}};
     gptimage::RealmGrant grant;
     std::string err;
-    REQUIRE(gptimage::grant_from_json(g, "archon", grant, err));
-    CHECK(grant.principal == "archon");
-    CHECK(grant.home_realm == "archon");
+    REQUIRE(gptimage::grant_from_json(g, "bob", grant, err));
+    CHECK(grant.principal == "bob");
+    CHECK(grant.home_realm == "bob");
     CHECK(grant.read_all);
     CHECK(grant.write_all);
 }
 
 TEST_CASE("grant_from_json: explicit lists + sensitivity ceiling") {
-    json g = {{"home", "nyx"},
-              {"read", {"nyx", "commons"}},
-              {"write", {"nyx", "commons"}},
+    json g = {{"home", "alice"},
+              {"read", {"alice", "commons"}},
+              {"write", {"alice", "commons"}},
               {"max_sensitivity", "medium"}};
     gptimage::RealmGrant grant;
     std::string err;
-    REQUIRE(gptimage::grant_from_json(g, "nyx", grant, err));
+    REQUIRE(gptimage::grant_from_json(g, "alice", grant, err));
     CHECK_FALSE(grant.read_all);
     CHECK(grant.read_realms.size() == 2);
     CHECK(grant.max_sensitivity == "medium");
     CHECK(gptimage::grant_sensitivity_cap(grant) == 1);
-    // Honors the scope: nyx may read commons, not archon.
+    // Honors the scope: alice may read commons, not bob.
     CHECK(gptimage::grant_can_read(grant, "commons"));
-    CHECK_FALSE(gptimage::grant_can_read(grant, "archon"));
+    CHECK_FALSE(gptimage::grant_can_read(grant, "bob"));
 }
 
 TEST_CASE("grant_from_json fails closed") {
@@ -96,17 +96,17 @@ TEST_CASE("grant_from_json fails closed") {
     std::string err;
 
     SUBCASE("missing home") {
-        json g = {{"read", {"nyx"}}};
-        CHECK_FALSE(gptimage::grant_from_json(g, "nyx", grant, err));
+        json g = {{"read", {"alice"}}};
+        CHECK_FALSE(gptimage::grant_from_json(g, "alice", grant, err));
         CHECK_FALSE(err.empty());
     }
     SUBCASE("non-object") {
         json g = json::array({"nope"});
-        CHECK_FALSE(gptimage::grant_from_json(g, "nyx", grant, err));
+        CHECK_FALSE(gptimage::grant_from_json(g, "alice", grant, err));
     }
     SUBCASE("non-string realm in list") {
-        json g = {{"home", "nyx"}, {"read", {1, 2, 3}}};
-        CHECK_FALSE(gptimage::grant_from_json(g, "nyx", grant, err));
+        json g = {{"home", "alice"}, {"read", {1, 2, 3}}};
+        CHECK_FALSE(gptimage::grant_from_json(g, "alice", grant, err));
     }
 }
 
@@ -114,27 +114,27 @@ TEST_CASE("resolve_jwt_principal") {
     gptimage::AuthConfig cfg;  // jwt_principal_claim defaults to "sub"
 
     SUBCASE("plain sub claim passes through") {
-        auto p = gptimage::resolve_jwt_principal(cfg, json{{"sub", "archon"}});
+        auto p = gptimage::resolve_jwt_principal(cfg, json{{"sub", "bob"}});
         REQUIRE(p.has_value());
-        CHECK(*p == "archon");
+        CHECK(*p == "bob");
     }
     SUBCASE("subject map rewrites UUID subjects to principal names") {
-        cfg.jwt_subject_map = {{"3f6a1c2e-dead-beef-0000-000000000001", "nyx"}};
+        cfg.jwt_subject_map = {{"3f6a1c2e-dead-beef-0000-000000000001", "alice"}};
         auto p = gptimage::resolve_jwt_principal(
             cfg, json{{"sub", "3f6a1c2e-dead-beef-0000-000000000001"}});
         REQUIRE(p.has_value());
-        CHECK(*p == "nyx");
+        CHECK(*p == "alice");
         // Unmapped subjects still pass through untranslated.
-        auto q = gptimage::resolve_jwt_principal(cfg, json{{"sub", "archon"}});
+        auto q = gptimage::resolve_jwt_principal(cfg, json{{"sub", "bob"}});
         REQUIRE(q.has_value());
-        CHECK(*q == "archon");
+        CHECK(*q == "bob");
     }
     SUBCASE("custom principal claim") {
         cfg.jwt_principal_claim = "preferred_username";
         auto p = gptimage::resolve_jwt_principal(
-            cfg, json{{"sub", "uuid-here"}, {"preferred_username", "archon"}});
+            cfg, json{{"sub", "uuid-here"}, {"preferred_username", "bob"}});
         REQUIRE(p.has_value());
-        CHECK(*p == "archon");
+        CHECK(*p == "bob");
     }
     SUBCASE("fails closed: missing, empty, or non-string claim") {
         CHECK_FALSE(gptimage::resolve_jwt_principal(cfg, json::object()).has_value());

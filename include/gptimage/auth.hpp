@@ -29,7 +29,7 @@ bool constant_time_equals(std::string_view a, std::string_view b);
 bool parse_bearer(const std::string& authorization_header, std::string& token_out);
 
 // Build a RealmGrant from a token row's `grants` JSON and the principal name.
-// Shape: {"home":"nyx","read":["nyx","commons"],"write":[...],"max_sensitivity":"medium"}.
+// Shape: {"home":"alice","read":["alice","commons"],"write":[...],"max_sensitivity":"medium"}.
 // read/write containing "*" sets read_all/write_all. Fails CLOSED: a missing or
 // empty home, or a malformed shape, returns false with `err` set.
 bool grant_from_json(const nlohmann::json& grants,

@@ -70,11 +70,11 @@ dbname = "d"
 user = "u"
 )");
     gptimage::patch_toml_keys(p, "identity",
-        {{"principal", "\"nyx\""}, {"realm", "\"nyx\""}});
+        {{"principal", "\"alice\""}, {"realm", "\"alice\""}});
     auto t = toml::parse(read_all(p));
     CHECK(t["database"]["dbname"].value<std::string>() == "d");
-    CHECK(t["identity"]["principal"].value<std::string>() == "nyx");
-    CHECK(t["identity"]["realm"].value<std::string>() == "nyx");
+    CHECK(t["identity"]["principal"].value<std::string>() == "alice");
+    CHECK(t["identity"]["realm"].value<std::string>() == "alice");
     fs::remove(p);
 }
 
