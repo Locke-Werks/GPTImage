@@ -27,7 +27,7 @@ std::string random_job_id() {
 }  // namespace
 
 JobStore::JobStore(int ttl_seconds, int max_concurrent)
-    : ttl_(ttl_seconds > 0 ? ttl_seconds : 900),
+    : ttl_(ttl_seconds > 0 ? ttl_seconds : 86400),
       max_concurrent_(max_concurrent > 0 ? max_concurrent : 4) {}
 
 void JobStore::evict_locked() {

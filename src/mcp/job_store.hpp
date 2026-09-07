@@ -45,7 +45,7 @@ struct ImageJob {
 // pick them up, then evicted.
 class JobStore {
 public:
-    explicit JobStore(int ttl_seconds = 900, int max_concurrent = 4);
+    explicit JobStore(int ttl_seconds = 86400, int max_concurrent = 4);
 
     // Start `work`; returns the new job id. If the concurrency cap is already
     // reached the job is created already-Errored (no thread is spawned), so the

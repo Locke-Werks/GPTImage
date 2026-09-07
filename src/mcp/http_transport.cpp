@@ -219,8 +219,8 @@ int McpServer::run_http() {
     // collapsed tool-call block. Deliberately auth-free: claude.ai's image proxy
     // fetches this with no bearer token, so the 96-bit random job id is the
     // capability. It only ever serves an image the same caller's generate/edit
-    // just produced, and the render is evicted from the in-memory cache minutes
-    // after it completes (job_ttl_seconds) — nothing is persisted. Serves from
+    // just produced, and the render is evicted from the in-memory cache a day
+    // after it completes (job_ttl_seconds); nothing is persisted. Serves from
     // the JobStore's own lock, so it is not serialized behind exec_mtx_.
     svr.Get(R"(/i/(job_[0-9a-f]+)-(\d+)\.(?:png|jpe?g|webp))",
             [this](const httplib::Request& req, httplib::Response& res) {

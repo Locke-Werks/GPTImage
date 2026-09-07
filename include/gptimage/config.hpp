@@ -73,11 +73,11 @@ struct ImageConfig {
     // so a fast render returns in one call and a slow one is polled in chunks.
     int job_poll_seconds     = 25;
     // How long a finished render is kept in the in-memory cache after it
-    // completes. This is the window its hosted URL stays live, so it must outlast
-    // the client fetching and rendering the link (seconds) with room for a reload;
-    // after it the render is dropped and nothing is persisted. Pending jobs are
-    // never evicted.
-    int job_ttl_seconds      = 900;
+    // completes. This is the window its hosted URL stays live: a day, so the
+    // client can fetch and render the link now and still come back to the same
+    // image later without regenerating it. After that the render is dropped and
+    // nothing is persisted. Pending jobs are never evicted.
+    int job_ttl_seconds      = 86400;  // 24 h
     int max_concurrent_jobs  = 4;
 
     // Resolved from environment at load time. Empty ⇒ the tools return an error

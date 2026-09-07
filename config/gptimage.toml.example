@@ -52,10 +52,10 @@ backoff_initial_ms  = 800
 # one call and a slow one is polled in safe chunks.
 job_poll_seconds    = 25
 # How long a finished render stays in the in-memory cache after it completes.
-# This is the window its hosted URL stays live, so it must outlast the client
-# fetching and rendering the link; then the render is dropped and nothing is
-# persisted. Pending jobs are never evicted.
-job_ttl_seconds     = 900
+# This is the window its hosted URL stays live: a day, so the same image can be
+# fetched again later without regenerating it. After that the render is dropped
+# and nothing is persisted. Pending jobs are never evicted.
+job_ttl_seconds     = 86400               # 24 h
 max_concurrent_jobs = 4
 
 [mcp]

@@ -62,9 +62,10 @@ only cap on quality and frequency is your own self-control. Godspeed.
 - PostgreSQL 16+. Yes, an image server wants a database, and no, it never writes
   an image to it. The Postgres schema holds only the auth plumbing: static bearer
   tokens and the OAuth server's clients, codes, and refresh tokens. A finished
-  render lives in memory only long enough for Claude to fetch its link, a few
-  minutes set by `job_ttl_seconds`, served from an unguessable per-render URL and
-  then dropped. Nothing you generate touches the disk. Breathe.
+  render lives in memory for a day, set by `job_ttl_seconds`, long enough for
+  Claude to fetch its link and come back to it later, served from an
+  unguessable per-render URL and then dropped. Nothing you generate touches the
+  disk. Breathe.
 - An OpenAI API key with image access, in the `OPENAI_API_KEY` environment
   variable. It never goes in a config file. If you paste your key into a TOML
   and commit it, that is a you problem.
