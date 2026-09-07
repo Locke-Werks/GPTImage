@@ -43,7 +43,7 @@ creep is how projects die in a ditch.
 
 Images come back as webp, a few dozen KB instead of a multi-megabyte PNG that a
 remote connector quietly drops on the floor. Over that connector the server
-also hosts each render for a few minutes and hands Claude a link to it, so the
+also hosts each render for a day and hands Claude a link to it, so the
 picture lands inline in the conversation body instead of collapsed inside a
 tool-call widget you have to expand. Locally over stdio there is nothing to
 host, so the image rides back inline as base64 and the client renders it.
