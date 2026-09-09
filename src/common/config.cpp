@@ -100,6 +100,37 @@ bool valid_sslmode(const std::string& m) {
            m == "require" || m == "verify-ca" || m == "verify-full";
 }
 
+// Ceiling tiers only. "auto" is not one: it is a request for the model to pick,
+// which cannot serve as an upper bound on what it picks.
+bool valid_quality_tier(const std::string& q) {
+    return q == "low" || q == "medium" || q == "high" || q == "xhigh" || q == "max";
+}
+
+// Expand a leading "~/" to the user's home directory. save_dir is one of the
+// few settings a person types by hand, "~/Pictures/GPTImage" is what they mean,
+// and std::filesystem expands nothing on its own: left alone it would create a
+// literal "~" directory under the working directory.
+std::string expand_home(std::string p) {
+    if (p.empty()) return p;
+    if (p[0] == '~' && (p.size() == 1 || p[1] == '/' || p[1] == '\\')) {
+        // USERPROFILE first on Windows: HOME is there too under Git Bash and MSYS,
+        // where it can be a POSIX-style path the Win32 API cannot open. Each
+        // platform's own convention wins, with the other as a fallback.
+#ifdef _WIN32
+        std::string home = env_or_empty("USERPROFILE");
+        if (home.empty()) home = env_or_empty("HOME");
+#else
+        std::string home = env_or_empty("HOME");
+        if (home.empty()) home = env_or_empty("USERPROFILE");
+#endif
+        if (!home.empty()) p = home + p.substr(1);
+    }
+    // Normalize the separators: this path is printed back to the user in every
+    // result caption, and splicing a Windows home onto a "/"-written config tail
+    // otherwise yields C:\Users\me/Pictures/GPTImage.
+    return std::filesystem::path(p).make_preferred().lexically_normal().string();
+}
+
 void parse_database_section(const toml::node_view<toml::node>& sec,
                             const char* label,
                             DatabaseConfig& cfg) {
@@ -156,23 +187,40 @@ Config load_config(const std::filesystem::path& path) {
     // ----- [image] -----
     if (auto sec = tbl["image"]; sec.is_table()) {
         cfg.image.model               = get_or<std::string>(sec["model"],               cfg.image.model);
+        cfg.image.model_flare         = get_or<std::string>(sec["model_flare"],         cfg.image.model_flare);
+        cfg.image.model_sunburst      = get_or<std::string>(sec["model_sunburst"],      cfg.image.model_sunburst);
         cfg.image.api_key_env         = get_or<std::string>(sec["api_key_env"],         cfg.image.api_key_env);
         cfg.image.generations_endpoint= get_or<std::string>(sec["generations_endpoint"],cfg.image.generations_endpoint);
         cfg.image.edits_endpoint      = get_or<std::string>(sec["edits_endpoint"],      cfg.image.edits_endpoint);
         cfg.image.public_base_url     = get_or<std::string>(sec["public_base_url"],     cfg.image.public_base_url);
+        cfg.image.save_dir            = get_or<std::string>(sec["save_dir"],            cfg.image.save_dir);
+        cfg.image.save_max_files      = static_cast<int>(get_or<int64_t>(sec["save_max_files"], cfg.image.save_max_files));
         cfg.image.default_size        = get_or<std::string>(sec["default_size"],        cfg.image.default_size);
         cfg.image.default_quality     = get_or<std::string>(sec["default_quality"],     cfg.image.default_quality);
         cfg.image.default_background  = get_or<std::string>(sec["default_background"],  cfg.image.default_background);
         cfg.image.default_format      = get_or<std::string>(sec["default_format"],      cfg.image.default_format);
         cfg.image.default_compression = static_cast<int>(get_or<int64_t>(sec["default_compression"], cfg.image.default_compression));
         cfg.image.moderation          = get_or<std::string>(sec["moderation"],          cfg.image.moderation);
+        cfg.image.max_quality         = get_or<std::string>(sec["max_quality"],         cfg.image.max_quality);
+        cfg.image.price_text_input_per_m   = get_or<double>(sec["price_text_input_per_m"],   cfg.image.price_text_input_per_m);
+        cfg.image.price_image_input_per_m  = get_or<double>(sec["price_image_input_per_m"],  cfg.image.price_image_input_per_m);
+        cfg.image.price_image_output_per_m = get_or<double>(sec["price_image_output_per_m"], cfg.image.price_image_output_per_m);
         cfg.image.max_n               = static_cast<int>(get_or<int64_t>(sec["max_n"],              cfg.image.max_n));
+        cfg.image.max_input_images    = static_cast<int>(get_or<int64_t>(sec["max_input_images"],   cfg.image.max_input_images));
         cfg.image.timeout_s           = static_cast<int>(get_or<int64_t>(sec["timeout_s"],          cfg.image.timeout_s));
         cfg.image.max_retries         = static_cast<int>(get_or<int64_t>(sec["max_retries"],        cfg.image.max_retries));
         cfg.image.backoff_initial_ms  = static_cast<int>(get_or<int64_t>(sec["backoff_initial_ms"], cfg.image.backoff_initial_ms));
         cfg.image.job_poll_seconds    = static_cast<int>(get_or<int64_t>(sec["job_poll_seconds"],    cfg.image.job_poll_seconds));
         cfg.image.job_ttl_seconds     = static_cast<int>(get_or<int64_t>(sec["job_ttl_seconds"],     cfg.image.job_ttl_seconds));
         cfg.image.max_concurrent_jobs = static_cast<int>(get_or<int64_t>(sec["max_concurrent_jobs"], cfg.image.max_concurrent_jobs));
+    }
+    cfg.image.save_dir = expand_home(std::move(cfg.image.save_dir));
+    // A misspelled ceiling would read as "unranked" and quietly lift the cap,
+    // so it fails at load instead of at the first expensive render.
+    if (!valid_quality_tier(cfg.image.max_quality)) {
+        throw std::runtime_error(
+            "config: image.max_quality invalid: '" + cfg.image.max_quality +
+            "' (expected one of low|medium|high|xhigh|max)");
     }
     // The key is resolved regardless of whether [image] was present, so the
     // ambient OPENAI_API_KEY works with a bare config.

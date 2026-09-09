@@ -126,7 +126,7 @@ json McpServer::handle_initialize(const json& params) {
 }
 
 json McpServer::handle_tools_list() {
-    return {{"tools", mcp_tool_schemas()}};
+    return {{"tools", mcp_tool_schemas(cfg_.image)}};
 }
 
 json McpServer::handle_tools_call(const json& params, const RealmGrant& grant) {

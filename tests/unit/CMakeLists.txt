@@ -5,6 +5,7 @@ set(GPTIMAGE_UNIT_TESTS
     test_auth
     test_config
     test_config_write
+    test_image_client
     test_jwt_sign
     test_password_hash
     test_realm_grants
@@ -26,3 +27,10 @@ add_test(NAME test_oauth COMMAND test_oauth)
 add_executable(test_job_store test_job_store.cpp)
 target_link_libraries(test_job_store PRIVATE gptimage_mcp_lib doctest::doctest)
 add_test(NAME test_job_store COMMAND test_job_store)
+
+# test_tools checks the advertised tools/list surface: one generate and one edit
+# tool per model, built from a shared template so the two cannot drift, with the
+# cost caps reflected in the schema a client actually sees.
+add_executable(test_tools test_tools.cpp)
+target_link_libraries(test_tools PRIVATE gptimage_mcp_lib doctest::doctest)
+add_test(NAME test_tools COMMAND test_tools)

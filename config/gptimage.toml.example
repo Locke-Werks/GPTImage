@@ -16,11 +16,29 @@ schema       = "gptimage"
 sslmode      = ""                         # "" = libpq default (prefer). Set "require" on an untrusted network.
 
 [image]
-# The whole point of the server. gpt-image-2 is "ChatGPT Images 2.0".
-model               = "gpt-image-2"
+# The two models, one tool pair each. Both are "ChatGPT Images 2.5": Flare is
+# the fast everyday model, Sunburst trades latency for tighter control across
+# edits. They bill identically (same token counts at the same quality), so the
+# choice is purely speed against precision. Pin a dated snapshot such as
+# "gpt-image-2.5-flare-2026-09-08" to freeze behaviour across OpenAI releases.
+model_flare         = "gpt-image-2.5-flare"
+model_sunburst      = "gpt-image-2.5-sunburst"
+# Fallback for a request that pins no model. The tools always pin one, so this
+# only matters to a caller that does not.
+model               = "gpt-image-2.5-flare"
 api_key_env         = "OPENAI_API_KEY"    # the key lives in the environment, not here
 generations_endpoint = "https://api.openai.com/v1/images/generations"
 edits_endpoint       = "https://api.openai.com/v1/images/edits"
+# Where finished renders are written, as <job_id>-<index>.<ext>. Empty (the
+# default) keeps nothing: the in-memory copy is dropped after job_ttl_seconds
+# and the picture is gone, which is fine for delivering an image and no use for
+# keeping one. Set this and two things change: the file is on disk for good, and
+# /i/<job_id> keeps serving after the memory copy expires instead of 404ing.
+# "~/" is expanded. On the VPS use the path systemd grants
+# (StateDirectory=gptimage gives /var/lib/gptimage), since ProtectSystem=strict
+# makes everything else read-only.
+# save_dir          = "~/Pictures/GPTImage"
+save_max_files      = 2000                # oldest above this are deleted; 0 = keep everything
 # Public origin this server is reachable at (no trailing slash). When set, a
 # finished render is also served at <public_base_url>/i/<job_id>-<index>.<ext>
 # and the tools hand the client a markdown image link, so the picture renders in
@@ -29,10 +47,11 @@ edits_endpoint       = "https://api.openai.com/v1/images/edits"
 # issuer (stdio/local) means inline base64 only, nothing is hosted.
 # public_base_url   = "https://gptimage.specterpoint.com"
 # Defaults applied when a tool call omits the field.
-default_size        = "1024x1024"         # WxH (÷16, aspect 1:3..3:1, up to 2K) or "auto"
-# low keeps interactive generations fast (~15-30s). high looks best but a large
-# high render can take ~2 min and exceed a remote connector's tool-call timeout.
-default_quality     = "low"               # auto | low | medium | high
+default_size        = "1024x1024"         # WxH (÷16, aspect 1:3..3:1, ≤3840/edge, ≤4K total) or "auto"
+# Measured on Flare at 1024x1024: low 196 output tokens (~$0.006, ~10s), medium
+# 439 (~$0.013, ~11s), high 1756 (~$0.053, ~18s), xhigh 3122 (~$0.094, ~23s).
+# Sunburst bills the same and takes roughly twice as long at the upper tiers.
+default_quality     = "medium"            # auto | low | medium | high | xhigh | max
 default_background  = "auto"              # transparent | opaque | auto (transparent not always honored)
 # webp, not png: an inline image round-trips as base64 and a full-res png
 # (1.5-3 MB) is large enough that claude.ai drops the tool result and nothing
@@ -41,20 +60,26 @@ default_background  = "auto"              # transparent | opaque | auto (transpa
 default_format      = "webp"              # png | jpeg | webp
 default_compression = 80                  # webp/jpeg quality 0-100 (higher = better/larger); ignored for png
 moderation          = "low"               # auto | low (low is permissive but still filtered)
+# The quality-side cost guard, and the one that matters more than max_n: output
+# tokens climb steeply at the top, and "max" is roughly four times "xhigh".
+# A request above the ceiling is clamped to it. Raise to "max" to lift the cap.
+max_quality         = "xhigh"             # low | medium | high | xhigh | max
 max_n               = 4                   # hard cap on images per call (cost guard)
-timeout_s           = 180                 # high quality / 2K can be slow
+max_input_images    = 16                  # the edits endpoint's own limit
+timeout_s           = 300                 # xhigh/max at 4K is slower than 2K ever was
 max_retries         = 4
 backoff_initial_ms  = 800
-# Async job pattern: gptimage_generate/gptimage_edit start a background render
-# and return fast; gptimage_result (read-only, so it never trips a write-approval
+# Async job pattern: the generate/edit tools start a background render and
+# return fast; gptimage_result (read-only, so it never trips a write-approval
 # prompt) fetches it. Each generate/result call blocks up to job_poll_seconds,
 # kept under any remote connector's tool-call timeout, so a fast render lands in
 # one call and a slow one is polled in safe chunks.
 job_poll_seconds    = 25
 # How long a finished render stays in the in-memory cache after it completes.
-# This is the window its hosted URL stays live: a day, so the same image can be
-# fetched again later without regenerating it. After that the render is dropped
-# and nothing is persisted. Pending jobs are never evicted.
+# With save_dir unset this is also the window its hosted URL stays live, and
+# after it the render is gone for good. With save_dir set the memory copy still
+# expires here, but the URL keeps working: the route falls through to disk.
+# Pending jobs are never evicted.
 job_ttl_seconds     = 86400               # 24 h
 max_concurrent_jobs = 4
 

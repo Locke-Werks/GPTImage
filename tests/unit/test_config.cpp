@@ -52,14 +52,20 @@ user = "tester"
     CHECK(cfg.database.dbname == "test");
     CHECK(cfg.database.user   == "tester");
     CHECK(cfg.database.schema == "gptimage");
-    // Defaults for the image backend. low quality + webp keep an interactive
+    // Defaults for the image backend. medium quality + webp keep an interactive
     // render fast and its inline payload light enough to render in the chat.
-    CHECK(cfg.image.model           == "gpt-image-2");
+    CHECK(cfg.image.model            == "gpt-image-2.5-flare");
+    CHECK(cfg.image.model_flare      == "gpt-image-2.5-flare");
+    CHECK(cfg.image.model_sunburst   == "gpt-image-2.5-sunburst");
     CHECK(cfg.image.default_size     == "1024x1024");
-    CHECK(cfg.image.default_quality  == "low");
+    CHECK(cfg.image.default_quality  == "medium");
     CHECK(cfg.image.default_format   == "webp");
     CHECK(cfg.image.default_compression == 80);
     CHECK(cfg.image.max_n            == 4);
+    CHECK(cfg.image.max_input_images == 16);
+    // The cost guard sits below the top tier by default: "max" is reachable only
+    // by deliberately raising it.
+    CHECK(cfg.image.max_quality      == "xhigh");
     // Nothing is hosted unless a base URL is configured or derived from OAuth.
     CHECK(cfg.image.public_base_url.empty());
     CHECK(cfg.mcp.transport == "stdio");
@@ -98,6 +104,8 @@ user = "tester"
 
 [image]
 model            = "gpt-image-99"
+model_flare      = "gpt-image-2.5-flare-2026-09-08"
+model_sunburst   = "gpt-image-2.5-sunburst-2026-09-08"
 api_key_env      = "GPTIMAGE_TEST_OAI_KEY"
 public_base_url  = "https://img.example.com/"
 default_size     = "1536x1024"
@@ -105,8 +113,11 @@ default_quality  = "low"
 default_format   = "webp"
 default_compression = 55
 moderation       = "auto"
+max_quality      = "max"
 max_n            = 2
+max_input_images = 4
 timeout_s        = 42
+price_image_output_per_m = 30.0
 )");
     auto cfg = gptimage::load_config(p);
     CHECK(cfg.image.model          == "gpt-image-99");
@@ -115,12 +126,70 @@ timeout_s        = 42
     CHECK(cfg.image.default_format  == "webp");
     CHECK(cfg.image.default_compression == 55);
     CHECK(cfg.image.moderation      == "auto");
+    CHECK(cfg.image.max_quality     == "max");
     CHECK(cfg.image.max_n           == 2);
+    CHECK(cfg.image.max_input_images == 4);
     CHECK(cfg.image.timeout_s       == 42);
+    CHECK(cfg.image.price_image_output_per_m == doctest::Approx(30.0));
+    // Snapshot pinning: a dated id freezes model behaviour across releases.
+    CHECK(cfg.image.model_flare    == "gpt-image-2.5-flare-2026-09-08");
+    CHECK(cfg.image.model_sunburst == "gpt-image-2.5-sunburst-2026-09-08");
     // An explicit base URL wins and has any trailing slash normalized off.
     CHECK(cfg.image.public_base_url == "https://img.example.com");
     // The key is resolved from the named env var, never stored in the TOML.
     CHECK(cfg.image.api_key == "sk-test-123");
+}
+
+TEST_CASE("save_dir expands ~ and normalizes separators") {
+    // The path is printed back in every result caption, so a spliced-together
+    // "C:\Users\me/Pictures/GPTImage" is a visible defect, not just untidy.
+#ifdef _WIN32
+    set_env("USERPROFILE", "C:\\Users\\tester");
+#else
+    set_env("HOME", "/home/tester");
+#endif
+    auto p = write_temp_toml("savedir", R"(
+[database]
+dbname = "test"
+user   = "tester"
+
+[image]
+save_dir = "~/Pictures/GPTImage"
+)");
+    auto cfg = gptimage::load_config(p);
+    const auto expect =
+        std::filesystem::path(
+#ifdef _WIN32
+            "C:\\Users\\tester"
+#else
+            "/home/tester"
+#endif
+        ) / "Pictures" / "GPTImage";  // operator/ already uses the native separator
+    CHECK(cfg.image.save_dir == expect.string());
+    CHECK(cfg.image.save_max_files == 2000);
+}
+
+TEST_CASE("save_dir is empty by default, so nothing is written unasked") {
+    auto p = write_temp_toml("nosave", R"(
+[database]
+dbname = "test"
+user   = "tester"
+)");
+    CHECK(gptimage::load_config(p).image.save_dir.empty());
+}
+
+TEST_CASE("an invalid max_quality fails at load, not at spend time") {
+    // A misspelled ceiling ranks as unknown, which would lift the cap instead of
+    // enforcing it. Better to refuse to start than to discover it on a bill.
+    auto p = write_temp_toml("bad_quality", R"(
+[database]
+dbname = "test"
+user   = "tester"
+
+[image]
+max_quality = "ultra"
+)");
+    CHECK_THROWS(gptimage::load_config(p));
 }
 
 TEST_CASE("public_base_url derives from the OAuth issuer when unset") {

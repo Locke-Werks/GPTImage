@@ -25,16 +25,42 @@ struct DatabaseConfig {
 };
 
 // [image] — the OpenAI image-generation backend. The whole point of the server:
-// gptimage_generate / gptimage_edit call these endpoints with the caller's
-// prompt and hand the base64 result straight back as an MCP image block.
+// the gptimage_* tools call these endpoints with the caller's prompt and hand
+// the base64 result straight back as an MCP image block.
 struct ImageConfig {
-    // Model id. gpt-image-2 is "ChatGPT Images 2.0". Bump here when OpenAI ships
-    // the next one; nothing else needs to change.
-    std::string model = "gpt-image-2";
+    // Fallback model for a request that does not pin one. Each tool pins its own
+    // (model_flare / model_sunburst), so this only applies to a bare request.
+    std::string model = "gpt-image-2.5-flare";
+    // The two models the tools pin, one tool pair each. Both are "ChatGPT Images
+    // 2.5": Flare is the fast everyday model, Sunburst trades latency for tighter
+    // control across edits. Set a dated snapshot ("gpt-image-2.5-flare-2026-09-08")
+    // to freeze behaviour across OpenAI's releases.
+    std::string model_flare    = "gpt-image-2.5-flare";
+    std::string model_sunburst = "gpt-image-2.5-sunburst";
     // Env var holding the OpenAI key. The key itself never lives in the TOML.
     std::string api_key_env = "OPENAI_API_KEY";
     std::string generations_endpoint = "https://api.openai.com/v1/images/generations";
     std::string edits_endpoint       = "https://api.openai.com/v1/images/edits";
+
+    // Directory finished renders are written to, as <job_id>-<index>.<ext>.
+    // Empty disables saving and the server keeps nothing.
+    //
+    // The in-memory cache drops a render after job_ttl_seconds, which is enough
+    // to deliver an image and not enough to keep one: a render nobody downloaded
+    // in time is gone. A save directory is the fix at both ends. Locally it puts
+    // the file on the user's own disk without them having to think about it; on
+    // a hosted deployment it is what stops /i/<job_id> 404ing a day later, since
+    // the route falls back to this directory once memory has let go.
+    //
+    // "~" and a leading "~/" are expanded at load time. On the VPS this wants a
+    // path systemd actually grants (StateDirectory=gptimage gives
+    // /var/lib/gptimage), because ProtectSystem=strict makes everything else
+    // read-only.
+    std::string save_dir;
+    // Oldest files above this count are deleted after each save, so an agent in
+    // a loop cannot fill the disk out from under everything else on the box.
+    // 0 = keep everything, and mind the disk yourself.
+    int save_max_files = 2000;
 
     // Public origin the HTTP transport is reachable at, e.g.
     // "https://gptimage.specterpoint.com" (no trailing slash). When set, a
@@ -47,7 +73,10 @@ struct ImageConfig {
 
     // Defaults applied when a tool call omits the field.
     std::string default_size       = "1024x1024";  // WxH (div by 16, 1:3..3:1) or "auto"
-    std::string default_quality    = "low";         // auto|low|medium|high
+    // medium, not low: Flare renders 2-4x faster than gpt-image-2 did, so the
+    // tier OpenAI recommends starting from now lands inside the poll window
+    // instead of falling through to a job id.
+    std::string default_quality    = "medium";      // auto|low|medium|high|xhigh|max
     std::string default_background = "auto";        // transparent|opaque|auto
     // webp, not png: an inline image round-trips as base64 in the tool result,
     // and a full-res png (1.5-3 MB) is large enough that a remote connector
@@ -62,8 +91,28 @@ struct ImageConfig {
     int         default_compression = 80;
     std::string moderation         = "low";         // auto|low
 
+    // Ceiling on the quality tier a caller may ask for: low < medium < high <
+    // xhigh < max. The quality-side companion to max_n, and the one that matters
+    // more, because output tokens climb steeply at the top of the range and a
+    // "max" render runs several times a "high" one. A request above the ceiling
+    // is clamped down to it, not rejected. Set "max" to lift the cap. "auto" is
+    // always allowed and is the one way past it, since the model picks the tier.
+    std::string max_quality = "xhigh";
+
+    // Published OpenAI rates per 1M tokens, used only to turn the usage the API
+    // reports back into a dollar figure in the result caption. Both GPT Image
+    // 2.5 models bill identically. Nothing depends on these being right except
+    // the accuracy of that caption; update them when the pricing page moves.
+    double price_text_input_per_m   = 5.00;
+    double price_image_input_per_m  = 8.00;
+    double price_image_output_per_m = 30.00;
+
     int max_n              = 4;    // hard cap on images per call (cost guard)
-    int timeout_s          = 180;  // generation can be slow at high quality/2K
+    // The edits endpoint takes at most this many reference images. Rejecting an
+    // over-long array here costs nothing; uploading it and being refused costs a
+    // round trip carrying every image.
+    int max_input_images   = 16;
+    int timeout_s          = 300;  // xhigh/max at 4K is slower than 2K ever was
     int max_retries        = 4;    // on 429/5xx/network
     int backoff_initial_ms = 800;
 

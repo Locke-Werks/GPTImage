@@ -8,6 +8,7 @@
 
 #include "job_store.hpp"
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -27,8 +28,15 @@ struct ToolContext {
 // Per-tool entry points (one .cpp each). generate/edit start a render and return
 // the image if it lands within the poll window, else a job_id; result fetches a
 // job_id.
-nlohmann::json tool_generate(const nlohmann::json& args, ToolContext& ctx);
-nlohmann::json tool_edit(const nlohmann::json& args, ToolContext& ctx);
+//
+// `model` is the OpenAI model id the calling tool pins (Flare or Sunburst). It
+// is a parameter rather than a config lookup because the model is the whole
+// difference between the two tool pairs: same arguments, same code path, one
+// string apart.
+nlohmann::json tool_generate(const nlohmann::json& args, ToolContext& ctx,
+                             const std::string& model);
+nlohmann::json tool_edit(const nlohmann::json& args, ToolContext& ctx,
+                         const std::string& model);
 nlohmann::json tool_result(const nlohmann::json& args, ToolContext& ctx);
 
 // ---------------------------------------------------------------------------
@@ -41,6 +49,18 @@ nlohmann::json text_result(const std::string& text, bool is_error = false);
 
 // Wrap arbitrary JSON as an MCP tool result (stringified into a text block).
 nlohmann::json json_result(const nlohmann::json& data);
+
+// Tail for a result caption: the tokens the API billed and what they cost at the
+// configured rates. Empty when the API reported no usage. This is the only
+// honest way to report cost for the 2.5 models — OpenAI publishes no static
+// token table for them, and token use per image differs by model and quality.
+std::string usage_caption(const ImageUsage& usage, const ImageConfig& cfg);
+
+// Tail naming where a render was written, or empty when saving is off. The path
+// goes in the caption on purpose: a client that can reach the filesystem can
+// open the file, and one that cannot at least tells the user where it landed
+// instead of leaving them to find out after the hosted copy is gone.
+std::string saved_caption(const std::vector<std::filesystem::path>& paths);
 
 // Build an MCP result carrying one or more inline image blocks
 // ({type:"image", data:<base64>, mimeType:...}) plus a trailing text caption.

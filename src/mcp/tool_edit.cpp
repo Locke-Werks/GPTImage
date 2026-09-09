@@ -13,7 +13,7 @@ namespace gptimage {
 
 using nlohmann::json;
 
-json tool_edit(const json& args, ToolContext& ctx) {
+json tool_edit(const json& args, ToolContext& ctx, const std::string& model) {
     const ImageConfig& ic = ctx.cfg.image;
     if (ic.api_key.empty()) {
         return text_result(
@@ -22,6 +22,13 @@ json tool_edit(const json& args, ToolContext& ctx) {
 
     if (!args.contains("images") || !args["images"].is_array() || args["images"].empty()) {
         return text_result("images (a non-empty array of base64 strings) is required", true);
+    }
+    if (static_cast<int>(args["images"].size()) > ic.max_input_images) {
+        return text_result(
+            "too many input images: " + std::to_string(args["images"].size()) +
+            " given, the edits endpoint accepts at most " +
+            std::to_string(ic.max_input_images) + ". Drop the least important "
+            "references and try again.", true);
     }
     const std::string prompt = args.value("prompt", std::string());
     if (prompt.empty()) {
@@ -53,28 +60,35 @@ json tool_edit(const json& args, ToolContext& ctx) {
 
     ImageRequest req;
     req.prompt  = prompt;
+    req.model   = model;
     req.size    = args.value("size",    ic.default_size);
     req.quality = args.value("quality", ic.default_quality);
+    req.background = args.value("background", ic.default_background);
     req.format  = args.value("format",  ic.default_format);
     req.n       = args.value("n",        1);
     req.compression = args.value("compression", ic.default_compression);
     if (req.n < 1) req.n = 1;
     if (req.n > ic.max_n) req.n = ic.max_n;
+    req.quality = clamp_quality(req.quality, ic.max_quality);
 
     const size_t input_count = inputs.size();
     const std::string id = ctx.jobs.submit(
         "edit", ctx.grant.principal,
-        [ic, req, inputs = std::move(inputs), mask = std::move(mask)]() -> JobOutput {
+        [ic, req, inputs = std::move(inputs), mask = std::move(mask)]
+        (const std::string& job_id) -> JobOutput {
             ImageClient client(ic);
             ImageResponse resp = client.edit(req, inputs, mask);
             std::string caption = "Edited into " + std::to_string(resp.images.size()) +
                 (resp.images.size() == 1 ? " image" : " images") +
-                " with " + ic.model + ".";
+                " with " + req.model + " (" + req.quality + ").";
+            caption += usage_caption(resp.usage, ic);
+            caption += saved_caption(
+                save_render(ic.save_dir, job_id, resp.images, ic.save_max_files));
             return JobOutput{std::move(resp.images), std::move(caption)};
         });
 
-    spdlog::info("gptimage_edit job={} principal={} inputs={} quality={}",
-                 id, ctx.grant.principal, input_count, req.quality);
+    spdlog::info("gptimage_edit job={} principal={} model={} inputs={} quality={}",
+                 id, ctx.grant.principal, model, input_count, req.quality);
 
     auto snap = ctx.jobs.wait_for(id, std::chrono::seconds(ic.job_poll_seconds));
     return render_job(snap, id, ic.public_base_url);

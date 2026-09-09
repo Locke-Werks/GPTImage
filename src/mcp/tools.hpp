@@ -15,7 +15,11 @@ struct ToolContext;
 // destructiveHint, idempotentHint, openWorldHint) — read-only tools set
 // readOnlyHint:true so write-gating clients (e.g. ChatGPT dev mode) don't
 // gate them as writes.
-nlohmann::json mcp_tool_schemas();
+//
+// Takes the image config because the advertised enums are built from it: the
+// quality list stops at max_quality and n stops at max_n, so a client is never
+// shown a value the server would clamp behind its back.
+nlohmann::json mcp_tool_schemas(const ImageConfig& ic);
 
 // Handle a tools/call. Returns the MCP tool-result shape:
 //   { "content": [ {"type": "text", "text": "..."}, ... ], "isError": bool? }

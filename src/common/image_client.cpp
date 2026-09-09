@@ -26,6 +26,12 @@ std::string mime_for_format(const std::string& f) {
 
 // Pull a human-readable message out of an API error body, falling back to a
 // truncated raw body so moderation/validation reasons still reach the caller.
+//
+// A moderation block carries an optional moderation_details object naming the
+// stage (the prompt or the finished image) and coarse categories. Both go into
+// the message: the model on the other end of this tool result is the one that
+// has to decide whether to rewrite the prompt or give up, and "blocked" alone
+// does not tell it which.
 std::string error_message(const cpr::Response& r) {
     try {
         auto j = json::parse(r.text);
@@ -35,6 +41,27 @@ std::string error_message(const cpr::Response& r) {
                 std::string msg = e["message"].get<std::string>();
                 if (e.contains("code") && e["code"].is_string()) {
                     msg += " [" + e["code"].get<std::string>() + "]";
+                }
+                if (e.contains("moderation_details") && e["moderation_details"].is_object()) {
+                    const auto& d = e["moderation_details"];
+                    std::string detail;
+                    if (d.contains("moderation_stage") && d["moderation_stage"].is_string()) {
+                        detail = "blocked at the " +
+                                 d["moderation_stage"].get<std::string>() + " stage";
+                    }
+                    if (d.contains("categories") && d["categories"].is_array() &&
+                        !d["categories"].empty()) {
+                        std::string cats;
+                        for (const auto& c : d["categories"]) {
+                            if (!c.is_string()) continue;
+                            if (!cats.empty()) cats += ", ";
+                            cats += c.get<std::string>();
+                        }
+                        if (!cats.empty()) {
+                            detail += (detail.empty() ? "categories: " : "; categories: ") + cats;
+                        }
+                    }
+                    if (!detail.empty()) msg += " (" + detail + ")";
                 }
                 return msg;
             }
@@ -74,11 +101,58 @@ ImageResponse parse_response(const cpr::Response& r, const std::string& mime) {
         out.usage.input_tokens  = u.value("input_tokens",  static_cast<long>(-1));
         out.usage.output_tokens = u.value("output_tokens", static_cast<long>(-1));
         out.usage.total_tokens  = u.value("total_tokens",  static_cast<long>(-1));
+        if (u.contains("input_tokens_details") && u["input_tokens_details"].is_object()) {
+            const auto& d = u["input_tokens_details"];
+            out.usage.input_text_tokens  = d.value("text_tokens",  static_cast<long>(-1));
+            out.usage.input_image_tokens = d.value("image_tokens", static_cast<long>(-1));
+        }
     }
     return out;
 }
 
 }  // namespace
+
+int quality_rank(const std::string& q) {
+    if (q == "auto")   return 0;
+    if (q == "low")    return 1;
+    if (q == "medium") return 2;
+    if (q == "high")   return 3;
+    if (q == "xhigh")  return 4;
+    if (q == "max")    return 5;
+    return -1;
+}
+
+std::string clamp_quality(const std::string& requested, const std::string& ceiling) {
+    const int want = quality_rank(requested);
+    const int cap  = quality_rank(ceiling);
+    if (want <= 0 || cap <= 0) return requested;  // auto/unknown either side
+    return want > cap ? ceiling : requested;
+}
+
+double usage_cost_usd(const ImageUsage& u, const ImageConfig& cfg, bool* exact) {
+    if (u.input_tokens < 0 && u.output_tokens < 0) {
+        if (exact) *exact = false;
+        return -1.0;
+    }
+    const double out_cost =
+        (u.output_tokens > 0 ? u.output_tokens : 0) * cfg.price_image_output_per_m / 1e6;
+
+    // The detail breakdown is what separates text input from image input, which
+    // bill at different rates. Without it, charging the lot at the text rate is
+    // the closest honest guess, and it is only wrong for edits.
+    if (u.input_text_tokens >= 0 || u.input_image_tokens >= 0) {
+        const double text_cost =
+            (u.input_text_tokens > 0 ? u.input_text_tokens : 0) * cfg.price_text_input_per_m / 1e6;
+        const double img_cost =
+            (u.input_image_tokens > 0 ? u.input_image_tokens : 0) * cfg.price_image_input_per_m / 1e6;
+        if (exact) *exact = true;
+        return text_cost + img_cost + out_cost;
+    }
+    const double in_cost =
+        (u.input_tokens > 0 ? u.input_tokens : 0) * cfg.price_text_input_per_m / 1e6;
+    if (exact) *exact = false;
+    return in_cost + out_cost;
+}
 
 std::vector<unsigned char> base64_decode(const std::string& in) {
     // Accept a data: URI by starting after the "base64," marker if present.
@@ -119,7 +193,7 @@ ImageResponse ImageClient::generate(const ImageRequest& req) {
     }
 
     json body;
-    body["model"]  = cfg_.model;
+    body["model"]  = req.model.empty() ? cfg_.model : req.model;
     body["prompt"] = req.prompt;
     body["n"]      = req.n;
     if (!req.size.empty())       body["size"]          = req.size;
@@ -182,11 +256,12 @@ ImageResponse ImageClient::edit(const ImageRequest& req,
     const std::string img_field = images.size() == 1 ? "image" : "image[]";
 
     cpr::Multipart mp{};
-    mp.parts.emplace_back("model", cfg_.model);
+    mp.parts.emplace_back("model", req.model.empty() ? cfg_.model : req.model);
     mp.parts.emplace_back("prompt", req.prompt);
     mp.parts.emplace_back("n", std::to_string(req.n));
     if (!req.size.empty())        mp.parts.emplace_back("size", req.size);
     if (!req.quality.empty())     mp.parts.emplace_back("quality", req.quality);
+    if (!req.background.empty())  mp.parts.emplace_back("background", req.background);
     if (!req.format.empty())      mp.parts.emplace_back("output_format", req.format);
     if (req.compression >= 0 && (req.format == "jpeg" || req.format == "webp")) {
         mp.parts.emplace_back("output_compression", std::to_string(req.compression));

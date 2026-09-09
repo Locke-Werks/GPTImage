@@ -11,7 +11,7 @@ namespace gptimage {
 
 using nlohmann::json;
 
-json tool_generate(const json& args, ToolContext& ctx) {
+json tool_generate(const json& args, ToolContext& ctx, const std::string& model) {
     const ImageConfig& ic = ctx.cfg.image;
     if (ic.api_key.empty()) {
         return text_result(
@@ -25,6 +25,7 @@ json tool_generate(const json& args, ToolContext& ctx) {
 
     ImageRequest req;
     req.prompt      = prompt;
+    req.model       = model;
     req.size        = args.value("size",       ic.default_size);
     req.quality     = args.value("quality",    ic.default_quality);
     req.background  = args.value("background",  ic.default_background);
@@ -34,24 +35,29 @@ json tool_generate(const json& args, ToolContext& ctx) {
     if (req.n < 1) req.n = 1;
     if (req.n > ic.max_n) req.n = ic.max_n;
 
+    // Clamp rather than reject: a caller asking for "max" under an "xhigh"
+    // ceiling wants the best available, and a picture at the cap serves that
+    // better than an error does. The caption says which tier actually ran.
+    req.quality = clamp_quality(req.quality, ic.max_quality);
+
     // Start the render on a background thread. The lambda is fully self-contained
     // (owns copies of the config and request), so it outlives this call safely.
     const std::string id = ctx.jobs.submit(
         "generate", ctx.grant.principal,
-        [ic, req]() -> JobOutput {
+        [ic, req](const std::string& job_id) -> JobOutput {
             ImageClient client(ic);
             ImageResponse resp = client.generate(req);
             std::string caption = "Generated " + std::to_string(resp.images.size()) +
                 (resp.images.size() == 1 ? " image" : " images") +
-                " with " + ic.model + " (" + req.quality + ", " + req.size + ").";
-            if (resp.usage.total_tokens >= 0) {
-                caption += " Tokens: " + std::to_string(resp.usage.total_tokens) + ".";
-            }
+                " with " + req.model + " (" + req.quality + ", " + req.size + ").";
+            caption += usage_caption(resp.usage, ic);
+            caption += saved_caption(
+                save_render(ic.save_dir, job_id, resp.images, ic.save_max_files));
             return JobOutput{std::move(resp.images), std::move(caption)};
         });
 
-    spdlog::info("gptimage_generate job={} principal={} quality={} size={}",
-                 id, ctx.grant.principal, req.quality, req.size);
+    spdlog::info("gptimage_generate job={} principal={} model={} quality={} size={}",
+                 id, ctx.grant.principal, model, req.quality, req.size);
 
     // Give a fast render (low quality / small size) the chance to land inside
     // this one call; otherwise the caller polls gptimage_result with the id.

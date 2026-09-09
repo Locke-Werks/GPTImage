@@ -219,12 +219,18 @@ int McpServer::run_http() {
     // collapsed tool-call block. Deliberately auth-free: claude.ai's image proxy
     // fetches this with no bearer token, so the 96-bit random job id is the
     // capability. It only ever serves an image the same caller's generate/edit
-    // just produced, and the render is evicted from the in-memory cache a day
-    // after it completes (job_ttl_seconds); nothing is persisted. Serves from
-    // the JobStore's own lock, so it is not serialized behind exec_mtx_.
-    svr.Get(R"(/i/(job_[0-9a-f]+)-(\d+)\.(?:png|jpe?g|webp))",
+    // just produced. Serves from the JobStore's own lock, so it is not
+    // serialized behind exec_mtx_.
+    //
+    // Two tiers: the in-memory cache, which drops a render job_ttl_seconds after
+    // it completes, and then image.save_dir on disk if one is configured. The
+    // disk tier is what makes a link outlive that TTL. Without it a URL handed
+    // out today is dead tomorrow, which is only ever discovered by the person
+    // who meant to save the picture and did not.
+    svr.Get(R"(/i/(job_[0-9a-f]+)-(\d+)\.(png|jpe?g|webp))",
             [this](const httplib::Request& req, httplib::Response& res) {
-        const std::string id = req.matches[1].str();
+        const std::string id  = req.matches[1].str();
+        const std::string ext = req.matches[3].str();
         size_t index = 0;
         try {
             index = static_cast<size_t>(std::stoul(req.matches[2].str()));
@@ -232,22 +238,34 @@ int McpServer::run_http() {
             res.status = 404;
             return;
         }
-        auto img = jobs_.get_image(id, index);
-        if (!img) {
+
+        std::vector<unsigned char> bytes;
+        std::string mime;
+        std::string tier;
+        if (auto img = jobs_.get_image(id, index)) {
+            bytes = base64_decode(img->b64);
+            mime  = img->mime;
+            tier  = "memory";
+            if (bytes.empty()) {
+                res.status = 500;
+                res.set_content("image decode error", "text/plain");
+                return;
+            }
+        } else if (auto stored = load_render(cfg_.image.save_dir, id, index, ext)) {
+            bytes = std::move(stored->bytes);
+            mime  = stored->mime;
+            tier  = "disk";
+        } else {
             res.status = 404;
             res.set_content("image not found (expired, already released, or never existed)",
                             "text/plain");
             return;
         }
-        const std::vector<unsigned char> bytes = base64_decode(img->b64);
-        if (bytes.empty()) {
-            res.status = 500;
-            res.set_content("image decode error", "text/plain");
-            return;
-        }
+
         res.set_header("Cache-Control", "private, max-age=300");
-        res.set_content(reinterpret_cast<const char*>(bytes.data()), bytes.size(), img->mime);
-        spdlog::info("http: GET /i {}-{} {} bytes ({})", id, index, bytes.size(), img->mime);
+        res.set_content(reinterpret_cast<const char*>(bytes.data()), bytes.size(), mime);
+        spdlog::info("http: GET /i {}-{} {} bytes ({}, from {})",
+                     id, index, bytes.size(), mime, tier);
     });
 
     // ---- GET /healthz: unauthenticated liveness -----------------------------

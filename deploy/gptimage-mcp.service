@@ -20,11 +20,17 @@ RestartSec=2
 StandardOutput=journal
 StandardError=journal
 
-# Hardening — the server only needs a TCP socket and the Postgres connection.
+# Hardening — the server needs a TCP socket, the Postgres connection, its log
+# directory, and (when image.save_dir is set) somewhere to keep renders.
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/var/log/gptimage
+# Creates /var/lib/gptimage owned by the service user and makes it writable
+# under ProtectSystem=strict. Point image.save_dir at it to keep finished
+# renders past job_ttl_seconds, which is what stops a hosted /i/ link 404ing a
+# day after it was handed out.
+StateDirectory=gptimage
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes

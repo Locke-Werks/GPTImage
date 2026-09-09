@@ -1,8 +1,48 @@
 #include "tool_common.hpp"
 
+#include <cstdio>
+
 namespace gptimage {
 
 using nlohmann::json;
+
+std::string saved_caption(const std::vector<std::filesystem::path>& paths) {
+    if (paths.empty()) return {};
+    std::string out = paths.size() == 1 ? " Saved to " : " Saved to: ";
+    for (size_t i = 0; i < paths.size(); ++i) {
+        if (i) out += ", ";
+        out += paths[i].string();
+    }
+    out += ".";
+    return out;
+}
+
+std::string usage_caption(const ImageUsage& usage, const ImageConfig& cfg) {
+    if (usage.total_tokens < 0 && usage.output_tokens < 0) return {};
+
+    std::string out = " Tokens: ";
+    out += std::to_string(usage.total_tokens >= 0 ? usage.total_tokens
+                                                  : usage.output_tokens);
+    if (usage.output_tokens >= 0) {
+        out += " (" + std::to_string(usage.output_tokens) + " out";
+        if (usage.input_image_tokens > 0) {
+            out += ", " + std::to_string(usage.input_image_tokens) + " image in";
+        }
+        out += ")";
+    }
+    out += ".";
+
+    bool exact = false;
+    const double cost = usage_cost_usd(usage, cfg, &exact);
+    if (cost >= 0.0) {
+        // Four decimals: a low-quality render is well under a cent, and rounding
+        // it to "$0.01" would make the cheap path look ten times its price.
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), " Cost: %s$%.4f.", exact ? "" : "~", cost);
+        out += buf;
+    }
+    return out;
+}
 
 json text_result(const std::string& text, bool is_error) {
     json out{

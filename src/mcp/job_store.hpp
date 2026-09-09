@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -21,9 +22,43 @@ struct JobOutput {
     std::string                 caption;
 };
 
-// The work a job runs on its background thread. Throwing marks the job Error
-// with the exception's message.
-using JobWork = std::function<JobOutput()>;
+// The work a job runs on its background thread. It is handed its own job id so
+// a render can be written to disk under the same name its hosted URL uses.
+// Throwing marks the job Error with the exception's message.
+using JobWork = std::function<JobOutput(const std::string& job_id)>;
+
+// ---------------------------------------------------------------------------
+// Disk tier
+// ---------------------------------------------------------------------------
+//
+// The JobStore holds a render in memory for job_ttl_seconds and then drops it,
+// which is fine for delivering an image and wrong for keeping one. Writing the
+// same bytes to a directory gives the render a life past that TTL: locally it
+// puts the file somewhere the user actually has it, and on a hosted deployment
+// it stops /i/<job_id> from 404ing a day later.
+
+// Raw bytes of a render read back from disk, ready to serve.
+struct StoredImage {
+    std::vector<unsigned char> bytes;
+    std::string                mime;
+};
+
+// Write each image of a finished render into `dir` as <job_id>-<index>.<ext>,
+// the same name its hosted URL uses, so the HTTP route can serve it from disk
+// with no index to consult. Creates `dir` if missing. Returns the paths written.
+//
+// Never throws: a render the caller has already paid for must not be lost
+// because a disk was full or a path was unwritable. A failure is logged and the
+// image is simply not saved.
+std::vector<std::filesystem::path> save_render(
+    const std::filesystem::path& dir, const std::string& job_id,
+    const std::vector<GeneratedImage>& images, int max_files);
+
+// Read one image of a previously saved render. `ext` comes from the request
+// path. std::nullopt when nothing is stored under that name.
+std::optional<StoredImage> load_render(
+    const std::filesystem::path& dir, const std::string& job_id, size_t index,
+    const std::string& ext);
 
 struct ImageJob {
     enum class Status { Pending, Done, Error };

@@ -4,7 +4,7 @@
 
 # GPTImage
 
-**Bolts OpenAI's gpt-image-2 into your chat window so you stop alt-tabbing like some kind of animal.**
+**Bolts OpenAI's ChatGPT Images 2.5 into your chat window so you stop alt-tabbing like some kind of animal.**
 
 [![license](https://img.shields.io/badge/license-GPLv3-d6262a?style=flat-square)](LICENSE)
 ![platform](https://img.shields.io/badge/platform-C%2B%2B20-d6262a?style=flat-square)
@@ -13,8 +13,8 @@
 
 ---
 
-An MCP server that bolts OpenAI's `gpt-image-2` onto Claude so you can stop
-alt-tabbing between two chat windows like some kind of animal.
+An MCP server that bolts OpenAI's GPT Image 2.5 models onto Claude so you can
+stop alt-tabbing between two chat windows like some kind of animal.
 
 You ask Claude for a picture. Claude calls a tool. The picture shows up in the
 chat. That is the entire trick. No browser automation, no scraping ChatGPT's
@@ -22,39 +22,51 @@ web UI, no cursed Selenium rig held together with duct tape and a prayer. Just
 the real API, wrapped in the Model Context Protocol, handing the image back
 inline where you can actually see it.
 
-`gpt-image-2` is the model formerly marketed at you as "ChatGPT Images 2.0."
-Same thing. It does legible text, 2K output, and does not smear faces into
-Lovecraftian horror nearly as often as its ancestors did.
+The models are `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst`, marketed at
+you as "ChatGPT Images 2.5." Flare is the fast one, Sunburst is the fussy one.
+They do legible text, 4K output, transparent backgrounds, and do not smear faces
+into Lovecraftian horror nearly as often as their ancestors did.
 
 ## What it actually does
 
-Two tools do the work, plus a third that just fetches a slow render. Scope
-creep is how projects die in a ditch.
+Each model gets its own generate and edit tool, so the model is picked by which
+tool Claude calls rather than buried in an argument it will forget to set. A
+fifth tool fetches a slow render. Scope creep is how projects die in a ditch.
 
-- **`gptimage_generate`** — text goes in, image comes out. Set `quality` to
-  `low` when you are just spitballing and `high` when it is going in the deck.
-  `auto`, `medium` also exist for the indecisive.
-- **`gptimage_edit`** — hand it one or more images plus a prompt and it edits or
-  mashes them together. Pass a `mask` for surgical inpainting instead of
-  "regenerate the whole damn thing and hope."
-- **`gptimage_result`**: a `high`-quality render can take a couple minutes,
-  longer than a connector will sit and wait, so the other two hand back a
+- **`gptimage_generate_flare`** — text in, image out, on the fast model. The
+  default for anything you are still thinking about.
+- **`gptimage_generate_sunburst`** — the same, on the precision model. Slower,
+  for the render that is actually going in the deck.
+- **`gptimage_edit_flare`** — hand it up to sixteen images plus a prompt and it
+  edits or mashes them together. Pass a `mask` for surgical inpainting instead
+  of "regenerate the whole damn thing and hope."
+- **`gptimage_edit_sunburst`** — the same, on the model built for it. Editing is
+  what Sunburst is for: change the one thing you asked about and leave the rest
+  of the frame alone, across several passes without the picture degrading.
+- **`gptimage_result`** — an `xhigh` render takes the better part of a minute,
+  longer than a connector will sit and wait, so the other four hand back a
   `job_id` and this fetches the finished image once it is ready.
 
 Images come back as webp, a few dozen KB instead of a multi-megabyte PNG that a
-remote connector quietly drops on the floor. Over that connector the server
-also hosts each render for a day and hands Claude a link to it, so the
-picture lands inline in the conversation body instead of collapsed inside a
-tool-call widget you have to expand. Locally over stdio there is nothing to
-host, so the image rides back inline as base64 and the client renders it.
+remote connector quietly drops on the floor. Over that connector the server also
+hosts each render and hands Claude a link to it, so the picture lands inline in
+the conversation body instead of collapsed inside a tool-call widget you have to
+expand. Locally over stdio there is nothing to host, so the image rides back
+inline as base64 and the client renders it.
+
+Set `save_dir` and every finished render is also written to disk, named the same
+as its hosted URL. Two things follow: you have the file without having to
+remember to save it, and the link keeps working after the in-memory copy expires
+instead of 404ing a day later, which is the failure everybody hits exactly once.
 
 ## The part you will ignore until it bites you
 
-This thing spends real money. Every `high`-quality 1024x1024 is roughly twenty
-cents of somebody's OpenAI bill, and that somebody is you. It is single-tenant
-by design: your key, your box, your problem. There is a `max_n` cap so an
-over-caffeinated agent cannot loop itself into bankruptcy in one call, but the
-only cap on quality and frequency is your own self-control. Godspeed.
+This thing spends real money. Measured on either model at 1024x1024, one image
+costs about half a cent at `low`, 1.3 cents at `medium`, 5.3 cents at `high` and
+9.4 cents at `xhigh`; `max` is around 21 cents. It is single-tenant by design:
+your key, your box, your problem. `max_n` caps images per call and
+`max_quality` caps the tier, which is the one that actually runs up a bill, but
+the cap on how often you press the button is your own self-control. Godspeed.
 
 ## The stuff you need
 
@@ -62,10 +74,9 @@ only cap on quality and frequency is your own self-control. Godspeed.
 - PostgreSQL 16+. Yes, an image server wants a database, and no, it never writes
   an image to it. The Postgres schema holds only the auth plumbing: static bearer
   tokens and the OAuth server's clients, codes, and refresh tokens. A finished
-  render lives in memory for a day, set by `job_ttl_seconds`, long enough for
-  Claude to fetch its link and come back to it later, served from an
-  unguessable per-render URL and then dropped. Nothing you generate touches the
-  disk. Breathe.
+  render lives in memory for a day, set by `job_ttl_seconds`, served from an
+  unguessable per-render URL and then dropped. It touches the disk only if you
+  set `save_dir`, and only as an ordinary image file in the directory you named.
 - An OpenAI API key with image access, in the `OPENAI_API_KEY` environment
   variable. It never goes in a config file. If you paste your key into a TOML
   and commit it, that is a you problem.
