@@ -13,6 +13,10 @@
 
 ---
 
+[![GPTImage demo](https://img.youtube.com/vi/b47KcmB1sGI/maxresdefault.jpg)](https://www.youtube.com/watch?v=b47KcmB1sGI)
+
+*Demo: OpenAI image generation inside Claude, over MCP (2:01)*
+
 An MCP server that bolts OpenAI's GPT Image 2.5 models onto Claude so you can
 stop alt-tabbing between two chat windows like some kind of animal.
 
