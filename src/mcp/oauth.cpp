@@ -201,6 +201,68 @@ bool oauth_host_allowed(const std::string& host, const std::vector<std::string>&
     return false;
 }
 
+namespace {
+
+struct LoopbackParts {
+    std::string host;  // lowercased; "[::1]" keeps its brackets
+    std::string rest;  // path + query, verbatim
+};
+
+std::optional<LoopbackParts> parse_loopback(const std::string& uri) {
+    constexpr const char* kScheme = "http://";
+    if (uri.rfind(kScheme, 0) != 0) return std::nullopt;
+    const size_t auth_start = std::string(kScheme).size();
+    size_t auth_end = uri.find_first_of("/?#", auth_start);
+    if (auth_end == std::string::npos) auth_end = uri.size();
+    const std::string authority = uri.substr(auth_start, auth_end - auth_start);
+    if (authority.find('@') != std::string::npos) return std::nullopt;
+
+    std::string host, port;
+    bool has_port = false;
+    if (!authority.empty() && authority.front() == '[') {
+        const size_t close = authority.find(']');
+        if (close == std::string::npos) return std::nullopt;
+        host = authority.substr(0, close + 1);
+        const std::string tail = authority.substr(close + 1);
+        if (!tail.empty()) {
+            if (tail.front() != ':') return std::nullopt;
+            port = tail.substr(1);
+            has_port = true;
+        }
+    } else if (const size_t colon = authority.find(':'); colon != std::string::npos) {
+        host = authority.substr(0, colon);
+        port = authority.substr(colon + 1);
+        has_port = true;
+    } else {
+        host = authority;
+    }
+    if (has_port) {
+        if (port.empty() || port.size() > 5 ||
+            !std::all_of(port.begin(), port.end(),
+                         [](unsigned char c) { return std::isdigit(c) != 0; }) ||
+            std::stol(port) > 65535) {
+            return std::nullopt;
+        }
+    }
+    std::transform(host.begin(), host.end(), host.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (host != "127.0.0.1" && host != "[::1]" && host != "localhost") return std::nullopt;
+    return LoopbackParts{host, uri.substr(auth_end)};
+}
+
+}  // namespace
+
+bool oauth_is_loopback_redirect(const std::string& uri) {
+    return parse_loopback(uri).has_value();
+}
+
+bool oauth_redirect_matches(const std::string& registered, const std::string& presented) {
+    if (registered == presented) return true;
+    const auto r = parse_loopback(registered);
+    const auto p = parse_loopback(presented);
+    return r && p && r->host == p->host && r->rest == p->rest;
+}
+
 OAuthService::OAuthService(const Config& cfg,
                            std::shared_ptr<const std::vector<SigningKey>> keys)
     : cfg_(cfg), keys_(std::move(keys)) {
@@ -361,7 +423,8 @@ OAuthService::register_client(const json& request, const std::string& ip) {
         return err(400, "invalid_client_metadata", "request body must be a JSON object");
     }
 
-    // redirect_uris: required, https-only, host allowlisted, no fragment.
+    // redirect_uris: required, no fragment, and either https with an
+    // allowlisted host or http to a loopback address.
     const auto uris_it = request.find("redirect_uris");
     if (uris_it == request.end() || !uris_it->is_array() || uris_it->empty()) {
         return err(400, "invalid_redirect_uri", "redirect_uris (non-empty array) is required");
@@ -378,10 +441,18 @@ OAuthService::register_client(const json& request, const std::string& ip) {
             return err(400, "invalid_redirect_uri",
                        "redirect_uris must not contain a fragment: " + uri);
         }
+        // Native apps (RFC 8252 §7.3) can only receive the code on a local
+        // listener. A code sent there reaches nothing but a process on the
+        // signing-in user's own machine, so the host allowlist, which exists
+        // to keep codes off third-party web servers, does not apply.
+        if (oauth_is_loopback_redirect(uri)) {
+            redirect_uris.push_back(uri);
+            continue;
+        }
         const std::string host = oauth_https_host_of(uri);
         if (host.empty()) {
             return err(400, "invalid_redirect_uri",
-                       "redirect_uris must be https:// URIs: " + uri);
+                       "redirect_uris must be https:// URIs or http:// loopback URIs: " + uri);
         }
         if (!oauth_host_allowed(host, cfg_.auth.oauth.redirect_hosts)) {
             return err(400, "invalid_redirect_uri",
@@ -524,8 +595,10 @@ OAuthService::validate_authorize(const std::multimap<std::string, std::string>& 
         return v;
     }
     if (v.req.redirect_uri.empty() ||
-        std::find(client->redirect_uris.begin(), client->redirect_uris.end(),
-                  v.req.redirect_uri) == client->redirect_uris.end()) {
+        std::none_of(client->redirect_uris.begin(), client->redirect_uris.end(),
+                     [&](const std::string& registered) {
+                         return oauth_redirect_matches(registered, v.req.redirect_uri);
+                     })) {
         v.error = err(400, "invalid_request",
                       "redirect_uri does not match any registered URI for this client");
         return v;
@@ -818,6 +891,9 @@ OAuthService::grant_authorization_code(const ClientRow& client,
     if (bound_client != client.client_id) {
         return err(400, "invalid_grant", "code was issued to a different client");
     }
+    // Exact on purpose, loopback included: bound_redirect is the URI this
+    // flow's authorize request used, port and all, which already passed the
+    // port-flexible check against registration (RFC 6749 §4.1.3).
     if (!redirect_uri.empty() && redirect_uri != bound_redirect) {
         return err(400, "invalid_grant", "redirect_uri does not match the authorization request");
     }

@@ -203,6 +203,17 @@ std::string oauth_https_host_of(const std::string& uri);
 // Exact match or subdomain of an allowlist entry; empty allowlist = allow all.
 bool oauth_host_allowed(const std::string& host, const std::vector<std::string>& allow);
 
+// RFC 8252 §7.3 / §8.3 loopback redirect: http:// with host exactly
+// 127.0.0.1, [::1] or localhost, an optional numeric port, no userinfo.
+// Accepted at registration regardless of the redirect-host allowlist.
+bool oauth_is_loopback_redirect(const std::string& uri);
+
+// Does a redirect_uri presented at authorize match a registered one? Exact
+// string match, except that two loopback URIs match when scheme, host, path
+// and query agree and only the port differs (RFC 8252 §7.3: a native app
+// binds whatever port is free at sign-in time).
+bool oauth_redirect_matches(const std::string& registered, const std::string& presented);
+
 // Cheap pre-parse guard: true if the raw JSON body nests no deeper than
 // `max_depth`. nlohmann's recursive-descent parser can stack-overflow on
 // pathologically nested input (bounded only by the 1 MiB body cap → a

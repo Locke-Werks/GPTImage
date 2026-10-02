@@ -3,7 +3,9 @@
 
 #include "oauth.hpp"
 
+#include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 TEST_CASE("PKCE S256 matches the RFC 7636 appendix B vector") {
@@ -67,4 +69,91 @@ TEST_CASE("redirect-host allowlist: exact + subdomain, no lookalikes") {
 
     // Empty allowlist = explicitly allow everything (config escape hatch).
     CHECK(gptimage::oauth_host_allowed("anything.example", {}));
+}
+
+TEST_CASE("loopback redirects: http to 127.0.0.1, [::1], localhost, any port") {
+    using gptimage::oauth_is_loopback_redirect;
+
+    CHECK(oauth_is_loopback_redirect("http://127.0.0.1:25179/callback"));
+    CHECK(oauth_is_loopback_redirect("http://127.0.0.1/callback"));
+    CHECK(oauth_is_loopback_redirect("http://[::1]:25179/callback"));
+    CHECK(oauth_is_loopback_redirect("http://[::1]/callback"));
+    CHECK(oauth_is_loopback_redirect("http://localhost:8080/callback"));
+    CHECK(oauth_is_loopback_redirect("http://localhost/callback"));
+    CHECK(oauth_is_loopback_redirect("http://LocalHost:8080/cb"));
+    CHECK(oauth_is_loopback_redirect("http://127.0.0.1:1"));
+
+    // http to anything that is not loopback stays rejected.
+    CHECK_FALSE(oauth_is_loopback_redirect("http://claude.ai/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://evil.com:25179/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://127.0.0.2/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://localhost.evil.com/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://127.0.0.1.evil.com/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://[::2]/callback"));
+    // Credentials, malformed ports and other schemes.
+    CHECK_FALSE(oauth_is_loopback_redirect("http://user@127.0.0.1/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://evil.com@127.0.0.1/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://127.0.0.1:/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://127.0.0.1:99999/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://127.0.0.1:80a/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("http://[::1]x/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("https://127.0.0.1/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("ftp://127.0.0.1/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect("com.example.app:/callback"));
+    CHECK_FALSE(oauth_is_loopback_redirect(""));
+
+    // https to a host off the allowlist is still refused by the https rule.
+    const std::vector<std::string> allow = {"claude.ai", "chatgpt.com"};
+    CHECK_FALSE(gptimage::oauth_host_allowed(
+        gptimage::oauth_https_host_of("https://evil.com/callback"), allow));
+}
+
+TEST_CASE("redirect matching: loopback port may differ, nothing else may") {
+    using gptimage::oauth_redirect_matches;
+    const std::string reg = "http://127.0.0.1:25179/callback";
+
+    CHECK(oauth_redirect_matches(reg, reg));
+    CHECK(oauth_redirect_matches(reg, "http://127.0.0.1:61000/callback"));
+    CHECK(oauth_redirect_matches(reg, "http://127.0.0.1/callback"));
+    CHECK(oauth_redirect_matches("http://[::1]:1/cb", "http://[::1]:2/cb"));
+    CHECK(oauth_redirect_matches("http://localhost:1/cb?x=1", "http://localhost:2/cb?x=1"));
+
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://127.0.0.1:61000/other"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://127.0.0.1:61000/callback/"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://127.0.0.1:61000/callback?x=1"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://127.0.0.1:61000/callback#x"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://localhost:25179/callback"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://[::1]:25179/callback"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "http://evil.com:25179/callback"));
+    CHECK_FALSE(oauth_redirect_matches(reg, "https://127.0.0.1:25179/callback"));
+
+    // Non-loopback registrations keep exact matching, port included.
+    const std::string web = "https://claude.ai/api/mcp/auth_callback";
+    CHECK(oauth_redirect_matches(web, web));
+    CHECK_FALSE(oauth_redirect_matches(web, "https://claude.ai:8443/api/mcp/auth_callback"));
+    CHECK_FALSE(oauth_redirect_matches(web, "https://claude.ai/api/mcp/auth_callback/"));
+    CHECK_FALSE(oauth_redirect_matches(web, "https://api.claude.ai/api/mcp/auth_callback"));
+    CHECK_FALSE(oauth_redirect_matches("https://claude.ai:443/cb", "https://claude.ai/cb"));
+}
+
+TEST_CASE("registration refuses non-loopback http and off-allowlist https") {
+    // Every refusal here happens before the rate limiter or the database is
+    // touched, so a default config and a throwaway key are enough.
+    gptimage::Config cfg;
+    auto keys = std::make_shared<std::vector<gptimage::SigningKey>>();
+    keys->push_back(gptimage::SigningKey::load_pem(gptimage::generate_rsa_key_pem(2048)));
+    gptimage::OAuthService svc(cfg, keys);
+
+    auto refused = [&](const std::string& uri) -> std::string {
+        const nlohmann::json body{{"redirect_uris", nlohmann::json::array({uri})}};
+        auto out = svc.register_client(body, "203.0.113.1");
+        if (!std::holds_alternative<gptimage::OAuthError>(out)) return "accepted";
+        return std::get<gptimage::OAuthError>(out).error;
+    };
+    CHECK(refused("http://evil.com/callback") == "invalid_redirect_uri");
+    CHECK(refused("http://claude.ai/callback") == "invalid_redirect_uri");
+    CHECK(refused("https://evil.com/callback") == "invalid_redirect_uri");
+    CHECK(refused("ftp://127.0.0.1/callback") == "invalid_redirect_uri");
+    CHECK(refused("http://user:pw@127.0.0.1/callback") == "invalid_redirect_uri");
+    CHECK(refused("http://127.0.0.1:25179/callback#frag") == "invalid_redirect_uri");
 }

@@ -114,7 +114,7 @@ enabled = true
 # access_token_ttl_s  = 900           # 15 min; no revocation store, so keep short (refresh carries longevity)
 # auth_code_ttl_s     = 600
 # refresh_token_ttl_s = 2592000
-# redirect_hosts      = ["claude.ai", "claude.com", "chatgpt.com", "openai.com"]
+# redirect_hosts      = ["claude.ai", "claude.com", "chatgpt.com", "openai.com"]  # https only; http loopback is always allowed
 # max_clients         = 50
 #
 # Optional extra secret (env var, never a config key):

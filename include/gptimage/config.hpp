@@ -176,6 +176,9 @@ struct OAuthConfig {
     std::vector<std::string> previous_key_paths;
     // Registered redirect URIs must be https and their host must equal or be a
     // subdomain of an entry here. Empty list = allow any host (discouraged).
+    // http loopback redirects (127.0.0.1, [::1], localhost, any port) are
+    // accepted regardless: a native app (RFC 8252) can only take the code on a
+    // local listener, and a code sent there never leaves the user's machine.
     std::vector<std::string> redirect_hosts =
         {"claude.ai", "claude.com", "chatgpt.com", "openai.com"};
     // Access tokens have no revocation store (jti is minted, not checked), so
