@@ -47,6 +47,7 @@ struct ImageRequest {
     std::string size;        // WxH | "auto"
     std::string quality;     // auto|low|medium|high|xhigh|max (top two are 2.5 only)
     std::string background;  // transparent|opaque|auto
+    std::string complexity;  // low|medium|high; empty => API default (high)
     std::string format;      // png|jpeg|webp
     int         n = 1;
     int         compression = -1;  // 0..100 for jpeg/webp; -1 => omit

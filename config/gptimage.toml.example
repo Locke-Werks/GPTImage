@@ -16,16 +16,16 @@ schema       = "gptimage"
 sslmode      = ""                         # "" = libpq default (prefer). Set "require" on an untrusted network.
 
 [image]
-# The two models, one tool pair each. Both are "ChatGPT Images 2.5": Flare is
+# The two models, one tool pair each. Both are "ChatGPT Images 2.6": Flare is
 # the fast everyday model, Sunburst trades latency for tighter control across
 # edits. They bill identically (same token counts at the same quality), so the
 # choice is purely speed against precision. Pin a dated snapshot such as
 # "gpt-image-2.5-flare-2026-09-08" to freeze behaviour across OpenAI releases.
-model_flare         = "gpt-image-2.5-flare"
-model_sunburst      = "gpt-image-2.5-sunburst"
+model_flare         = "gpt-image-2.6-flare"
+model_sunburst      = "gpt-image-2.6-sunburst"
 # Fallback for a request that pins no model. The tools always pin one, so this
 # only matters to a caller that does not.
-model               = "gpt-image-2.5-flare"
+model               = "gpt-image-2.6-flare"
 api_key_env         = "OPENAI_API_KEY"    # the key lives in the environment, not here
 generations_endpoint = "https://api.openai.com/v1/images/generations"
 edits_endpoint       = "https://api.openai.com/v1/images/edits"

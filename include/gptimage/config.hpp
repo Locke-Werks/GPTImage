@@ -30,13 +30,13 @@ struct DatabaseConfig {
 struct ImageConfig {
     // Fallback model for a request that does not pin one. Each tool pins its own
     // (model_flare / model_sunburst), so this only applies to a bare request.
-    std::string model = "gpt-image-2.5-flare";
+    std::string model = "gpt-image-2.6-flare";
     // The two models the tools pin, one tool pair each. Both are "ChatGPT Images
-    // 2.5": Flare is the fast everyday model, Sunburst trades latency for tighter
+    // 2.6": Flare is the fast everyday model, Sunburst trades latency for tighter
     // control across edits. Set a dated snapshot ("gpt-image-2.5-flare-2026-09-08")
     // to freeze behaviour across OpenAI's releases.
-    std::string model_flare    = "gpt-image-2.5-flare";
-    std::string model_sunburst = "gpt-image-2.5-sunburst";
+    std::string model_flare    = "gpt-image-2.6-flare";
+    std::string model_sunburst = "gpt-image-2.6-sunburst";
     // Env var holding the OpenAI key. The key itself never lives in the TOML.
     std::string api_key_env = "OPENAI_API_KEY";
     std::string generations_endpoint = "https://api.openai.com/v1/images/generations";
@@ -101,7 +101,7 @@ struct ImageConfig {
 
     // Published OpenAI rates per 1M tokens, used only to turn the usage the API
     // reports back into a dollar figure in the result caption. Both GPT Image
-    // 2.5 models bill identically. Nothing depends on these being right except
+    // 2.6 models bill identically. Nothing depends on these being right except
     // the accuracy of that caption; update them when the pricing page moves.
     double price_text_input_per_m   = 5.00;
     double price_image_input_per_m  = 8.00;

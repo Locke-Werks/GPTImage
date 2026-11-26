@@ -52,7 +52,7 @@ nlohmann::json json_result(const nlohmann::json& data);
 
 // Tail for a result caption: the tokens the API billed and what they cost at the
 // configured rates. Empty when the API reported no usage. This is the only
-// honest way to report cost for the 2.5 models — OpenAI publishes no static
+// honest way to report cost for the 2.6 models — OpenAI publishes no static
 // token table for them, and token use per image differs by model and quality.
 std::string usage_caption(const ImageUsage& usage, const ImageConfig& cfg);
 

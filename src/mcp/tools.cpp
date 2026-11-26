@@ -31,6 +31,7 @@ struct SharedProps {
     json size;
     json quality;
     json background;
+    json complexity;
     json format;
     json n;
     json compression;
@@ -80,6 +81,16 @@ SharedProps shared_props(const ImageConfig& ic) {
             "an edit it is how you strip a background off an existing image. "
             "\"opaque\" forces a filled background, \"auto\" lets the model decide "
             "and is the safe choice otherwise."},
+    };
+    p.complexity = {
+        {"type", "string"},
+        {"enum", json::array({"low", "medium", "high"})},
+        {"description",
+            "How much scene detail and change the model is allowed to introduce, "
+            "separate from quality and billed nothing extra. Omit it for the API "
+            "default, high. Use low for flat graphics, icons and edits that must "
+            "leave the rest of the frame alone; higher settings add latency and can "
+            "invent detail nobody asked for."},
     };
     p.format = {
         {"type", "string"},
@@ -166,6 +177,7 @@ json generate_tool(const std::string& name, const std::string& title,
                 {"size",        p.size},
                 {"quality",     p.quality},
                 {"background",  p.background},
+                {"complexity",  p.complexity},
                 {"format",      p.format},
                 {"n",           p.n},
                 {"compression", p.compression},
@@ -225,6 +237,7 @@ json edit_tool(const std::string& name, const std::string& title,
                 {"size",        p.size},
                 {"quality",     p.quality},
                 {"background",  p.background},
+                {"complexity",  p.complexity},
                 {"format",      p.format},
                 {"n",           p.n},
                 {"compression", p.compression},
@@ -249,7 +262,7 @@ json mcp_tool_schemas(const ImageConfig& ic) {
     return json::array({
         generate_tool(
             "gptimage_generate_flare", "Generate Image (Flare)",
-            "Generate an image from a text prompt with OpenAI GPT Image 2.5 Flare. "
+            "Generate an image from a text prompt with OpenAI GPT Image 2.6 Flare. "
             "Reach for this one by default. It is the fast everyday model: about "
             "11 s at medium quality and 18 s at high for a 1024x1024, which is "
             "roughly half what Sunburst takes and fast enough that most renders "
@@ -268,7 +281,7 @@ json mcp_tool_schemas(const ImageConfig& ic) {
             p),
         generate_tool(
             "gptimage_generate_sunburst", "Generate Image (Sunburst)",
-            "Generate an image from a text prompt with OpenAI GPT Image 2.5 "
+            "Generate an image from a text prompt with OpenAI GPT Image 2.6 "
             "Sunburst, the precision model. Same arguments, same price and the same "
             "token count per image as Flare: the whole trade is wall-clock time "
             "against exactness. Reckon on about 18 s at medium and 33 s at high for "
@@ -284,7 +297,7 @@ json mcp_tool_schemas(const ImageConfig& ic) {
             p),
         edit_tool(
             "gptimage_edit_flare", "Edit Image (Flare)",
-            "Edit, extend or combine existing images with OpenAI GPT Image 2.5 "
+            "Edit, extend or combine existing images with OpenAI GPT Image 2.6 "
             "Flare. Pass the input images as base64 strings plus a prompt saying "
             "what to change. Three modes, chosen by what you send:\n"
             "- one image, no mask: rewrites the whole frame guided by the original\n"
@@ -303,7 +316,7 @@ json mcp_tool_schemas(const ImageConfig& ic) {
             p, ic.max_input_images),
         edit_tool(
             "gptimage_edit_sunburst", "Edit Image (Sunburst)",
-            "Edit, extend or combine existing images with OpenAI GPT Image 2.5 "
+            "Edit, extend or combine existing images with OpenAI GPT Image 2.6 "
             "Sunburst. Editing is what Sunburst is built for and the place its "
             "extra time actually earns itself. Choose it when the job is to change "
             "one element (a product, a background, a line of copy) while the "

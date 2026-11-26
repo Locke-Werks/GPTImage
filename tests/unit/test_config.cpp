@@ -54,9 +54,9 @@ user = "tester"
     CHECK(cfg.database.schema == "gptimage");
     // Defaults for the image backend. medium quality + webp keep an interactive
     // render fast and its inline payload light enough to render in the chat.
-    CHECK(cfg.image.model            == "gpt-image-2.5-flare");
-    CHECK(cfg.image.model_flare      == "gpt-image-2.5-flare");
-    CHECK(cfg.image.model_sunburst   == "gpt-image-2.5-sunburst");
+    CHECK(cfg.image.model            == "gpt-image-2.6-flare");
+    CHECK(cfg.image.model_flare      == "gpt-image-2.6-flare");
+    CHECK(cfg.image.model_sunburst   == "gpt-image-2.6-sunburst");
     CHECK(cfg.image.default_size     == "1024x1024");
     CHECK(cfg.image.default_quality  == "medium");
     CHECK(cfg.image.default_format   == "webp");

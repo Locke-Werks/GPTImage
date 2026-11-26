@@ -4,7 +4,7 @@
 
 # GPTImage
 
-**Bolts OpenAI's ChatGPT Images 2.5 into your chat window so you stop alt-tabbing like some kind of animal.**
+**Bolts OpenAI's ChatGPT Images 2.6 into your chat window so you stop alt-tabbing like some kind of animal.**
 
 [![license](https://img.shields.io/badge/license-GPLv3-d6262a?style=flat-square)](LICENSE)
 ![platform](https://img.shields.io/badge/platform-C%2B%2B20-d6262a?style=flat-square)
@@ -17,7 +17,7 @@
 
 *Demo: OpenAI image generation inside Claude, over MCP (2:01)*
 
-An MCP server that bolts OpenAI's GPT Image 2.5 models onto Claude so you can
+An MCP server that bolts OpenAI's GPT Image 2.6 models onto Claude so you can
 stop alt-tabbing between two chat windows like some kind of animal.
 
 You ask Claude for a picture. Claude calls a tool. The picture shows up in the
@@ -26,8 +26,8 @@ web UI, no cursed Selenium rig held together with duct tape and a prayer. Just
 the real API, wrapped in the Model Context Protocol, handing the image back
 inline where you can actually see it.
 
-The models are `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst`, marketed at
-you as "ChatGPT Images 2.5." Flare is the fast one, Sunburst is the fussy one.
+The models are `gpt-image-2.6-flare` and `gpt-image-2.6-sunburst`, marketed at
+you as "ChatGPT Images 2.6." Flare is the fast one, Sunburst is the fussy one.
 They do legible text, 4K output, transparent backgrounds, and do not smear faces
 into Lovecraftian horror nearly as often as their ancestors did.
 

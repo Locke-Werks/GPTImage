@@ -19,7 +19,7 @@ it.
 ```markdown
 ## GPTImage
 
-You have five tools. Four are the two OpenAI GPT Image 2.5 models crossed with
+You have five tools. Four are the two OpenAI GPT Image 2.6 models crossed with
 generate and edit; the fifth fetches a slow render.
 
 - `gptimage_generate_flare` / `gptimage_edit_flare` — the fast model. Default to
@@ -103,6 +103,7 @@ identical arguments.
 | `size` | `WIDTHxHEIGHT` or `auto` | `1024x1024` | Both edges divisible by 16, aspect 1:3 to 3:1, no edge over 3840, total pixels 655,360 to 8,294,400. Above 2560x1440 is experimental. |
 | `quality` | `auto` `low` `medium` `high` `xhigh` | `medium` | Drives both time and cost. `max` appears only if the server's `max_quality` allows it. |
 | `background` | `auto` `opaque` `transparent` | `auto` | `transparent` needs png or webp. |
+| `complexity` | `low` `medium` `high` | omitted (API uses `high`) | Detail and change the model may introduce. No extra cost. `low` for icons, flat graphics and tightly scoped edits. |
 | `format` | `png` `jpeg` `webp` | `webp` | webp keeps the payload small enough to survive the connector. |
 | `n` | 1 to 4 | 1 | Server cap. Each one costs. |
 | `compression` | 0 to 100 | 80 | webp and jpeg only, ignored for png. |
@@ -121,13 +122,13 @@ Existing images in, edited image out. `images` and `prompt` are required.
 | `images` | array of base64 strings, 1 to 16 | required | png, jpeg, or webp bytes. A `data:` URI is accepted, the prefix is stripped. |
 | `prompt` | string | required | What to change, or how to combine the inputs. Name what must stay the same too. |
 | `mask` | base64 png | none | Transparent pixels mark the region to change. Must match the first image's format and size, under 50 MB. |
-| `size` `quality` `background` `format` `n` `compression` | as above | as above | Same as generate. `background: "transparent"` with png or webp is how you strip a background off an existing image. |
+| `size` `quality` `background` `complexity` `format` `n` `compression` | as above | as above | Same as generate. `background: "transparent"` with png or webp is how you strip a background off an existing image. |
 
 Two inputs and no mask composites them into one scene. One input and a mask is
 targeted inpainting. One input and no mask rewrites the whole frame guided by
 the original.
 
-There is no `input_fidelity` argument and you do not want one: the 2.5 models
+There is no `input_fidelity` argument and you do not want one: the 2.6 models
 process every image input at full fidelity automatically, and the API rejects
 the parameter. The cost of that shows up as image input tokens. A single
 1024x1024 reference adds about 1024 of them, which at $8 per million is $0.008,
@@ -370,7 +371,7 @@ Do not promise these.
 - No streaming and no partial previews. `partial_images` exists in the API and
   this server does not use it, so there is nothing to show mid-render.
 - No job list and no history. You need the `job_id` you were given.
-- No older models. Only the two 2.5 models are exposed.
+- No older models. Only the two 2.6 models are exposed.
 - Four concurrent renders. A fifth returns "server is busy" immediately, which
   is a retry-shortly condition, not a failure of the request itself.
 - `n` is capped at 4 per call by the server, whatever you pass.
@@ -413,7 +414,7 @@ hedge unless the user asked for options.
 
 | Fact | Value |
 | --- | --- |
-| Models | `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst` |
+| Models | `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst` |
 | Poll window per call | 25 s |
 | In-memory render kept for | 86400 s (24 h) |
 | On-disk render kept for | until pruned at `save_max_files` (default 2000) |

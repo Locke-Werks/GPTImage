@@ -106,6 +106,19 @@ TEST_CASE("advertised quality stops at the configured ceiling") {
     }
 }
 
+TEST_CASE("every image tool offers complexity with no default") {
+    gptimage::ImageConfig ic;
+    const json schemas = gptimage::mcp_tool_schemas(ic);
+    for (const char* name : {"gptimage_generate_flare", "gptimage_generate_sunburst",
+                             "gptimage_edit_flare", "gptimage_edit_sunburst"}) {
+        const json& c = tool_named(schemas, name)["inputSchema"]["properties"]["complexity"];
+        CHECK(has(c["enum"], "low"));
+        CHECK(has(c["enum"], "high"));
+        // Omitted means the API's own default; a schema default would always send it.
+        CHECK_FALSE(c.contains("default"));
+    }
+}
+
 TEST_CASE("the cost caps reach the advertised schema") {
     gptimage::ImageConfig ic;
     ic.max_n = 2;

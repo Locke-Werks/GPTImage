@@ -199,6 +199,7 @@ ImageResponse ImageClient::generate(const ImageRequest& req) {
     if (!req.size.empty())       body["size"]          = req.size;
     if (!req.quality.empty())    body["quality"]       = req.quality;
     if (!req.background.empty()) body["background"]     = req.background;
+    if (!req.complexity.empty()) body["complexity"]     = req.complexity;
     if (!req.format.empty())     body["output_format"] = req.format;
     if (!cfg_.moderation.empty()) body["moderation"]   = cfg_.moderation;
     if (req.compression >= 0 && (req.format == "jpeg" || req.format == "webp")) {
@@ -262,6 +263,7 @@ ImageResponse ImageClient::edit(const ImageRequest& req,
     if (!req.size.empty())        mp.parts.emplace_back("size", req.size);
     if (!req.quality.empty())     mp.parts.emplace_back("quality", req.quality);
     if (!req.background.empty())  mp.parts.emplace_back("background", req.background);
+    if (!req.complexity.empty())  mp.parts.emplace_back("complexity", req.complexity);
     if (!req.format.empty())      mp.parts.emplace_back("output_format", req.format);
     if (req.compression >= 0 && (req.format == "jpeg" || req.format == "webp")) {
         mp.parts.emplace_back("output_compression", std::to_string(req.compression));

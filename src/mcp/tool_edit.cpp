@@ -64,6 +64,7 @@ json tool_edit(const json& args, ToolContext& ctx, const std::string& model) {
     req.size    = args.value("size",    ic.default_size);
     req.quality = args.value("quality", ic.default_quality);
     req.background = args.value("background", ic.default_background);
+    req.complexity = args.value("complexity", std::string{});
     req.format  = args.value("format",  ic.default_format);
     req.n       = args.value("n",        1);
     req.compression = args.value("compression", ic.default_compression);
