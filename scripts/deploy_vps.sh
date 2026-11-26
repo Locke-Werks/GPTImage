@@ -13,7 +13,7 @@
 # Run as root; the build + migrate run as the unprivileged `gptimage` user.
 
 REF="${1:-origin/main}"
-REPO="https://github.com/lockewerks/GPTImage.git"
+REPO="https://github.com/Locke-Werks/GPTImage.git"
 SRC=/opt/gptimage/src
 REL=/opt/gptimage/releases
 CONFIG=/etc/gptimage/gptimage.toml
